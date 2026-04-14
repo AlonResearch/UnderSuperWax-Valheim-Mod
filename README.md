@@ -1,4 +1,4 @@
-# UnderSuperWax 0.0.1-alpha
+# UnderSuperWax 0.0.2-alpha
 
 UnderSuperWax is a fork of SuperWax by JasterLee that preserves the Beewax content pipeline while replacing the old runtime protection approach with explicit `WearNTear`-based waterproofing hooks.
 
@@ -69,25 +69,28 @@ Intercepts hammer tool use to apply wax state.
 
 ## Repository Layout
 
-1. `src/UnderSuperWax`:
-Plugin source, project file, and embedded resources.
-2. `package`:
-Thunderstore metadata (`manifest.json`, `README.md`, `description.md`, `icon.png`, `CHANGELOG.md`).
-3. `releases`:
-Generated zip artifacts.
-4. `BuildRelease.ps1`:
-Build and packaging entry point.
-5. `UnderSuperWax.sln`:
-Root solution.
+```text
+UnderSuperWax/          # Repository root
+├─ description.md       # Short project description used for distribution metadata
+├─ package/             # Thunderstore distribution metadata and package-facing docs/assets
+├─ releases/            # Generated release zip output directory
+├─ src/                 # Plugin source code and embedded resources
+├─ .gitignore           # Git ignore rules for local/build artifacts
+├─ BuildRelease.ps1     # Build and package script for release artifacts
+├─ LICENSE              # Project license
+├─ README.md            # Main technical/project documentation
+├─ testing.md           # In-game QA and feature verification guide
+└─ UnderSuperWax.sln    # Visual Studio solution entry point
+```
 
 ## Build and Release
 
 1. Build and package command:
 `./BuildRelease.ps1`
 2. Output zip:
-`releases/UnderSuperWax-0.0.1-alpha.zip`
+`releases/UnderSuperWax-0.0.2-alpha.zip`
 3. Zip layout:
-`manifest.json`, `README.md`, `description.md`, `icon.png`, `plugins/UnderSuperWax.dll`
+`manifest.json`, `README.md`, `icon.png`, `plugins/UnderSuperWax.dll`
 
 Reference resolution defaults:
 

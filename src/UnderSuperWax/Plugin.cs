@@ -17,11 +17,13 @@ public sealed class UnderSuperWaxPlugin : BaseUnityPlugin
 {
     public const string ModGuid = "com.alon.tuf.undersuperwax";
     public const string ModName = "UnderSuperWax";
-    public const string ModVersion = "0.0.1-alpha";
+    public const string ModVersion = "0.0.2-alpha";
 
     internal const string ZdoKey = "UnderSuperWax_Waxed_Final_v1";
     internal const string ItemPrefabName = "Beewax";
     internal const string ToolPrefabName = "UnderSuperWaxTool";
+    internal const string RpcRequestApplyWax = "USW_RPC_RequestApplyWax_v1";
+    internal const string RpcWaxApplyResult = "USW_RPC_WaxApplyResult_v1";
 
     internal static ConfigEntry<float> ShineGlossiness = null!;
     internal static ConfigEntry<float> ShineMetallic = null!;
@@ -183,6 +185,8 @@ internal sealed class UnderSuperWaxProtection : MonoBehaviour
     private ZNetView? zNetView;
     private Renderer[]? renderers;
     private MaterialPropertyBlock? propertyBlock;
+    private bool pendingLocalApply;
+    private Vector3 pendingEffectPosition;
 
     private void Awake()
     {
@@ -191,6 +195,12 @@ internal sealed class UnderSuperWaxProtection : MonoBehaviour
         zNetView = GetComponent<ZNetView>();
         renderers = GetComponentsInChildren<Renderer>(true);
         propertyBlock = new MaterialPropertyBlock();
+
+        if (zNetView != null && zNetView.IsValid())
+        {
+            zNetView.Register(UnderSuperWaxPlugin.RpcRequestApplyWax, RPC_RequestApplyWax);
+            zNetView.Register<string>(UnderSuperWaxPlugin.RpcWaxApplyResult, RPC_WaxApplyResult);
+        }
     }
 
     private void Start()
@@ -239,6 +249,7 @@ internal sealed class UnderSuperWaxProtection : MonoBehaviour
     internal void Cleanup()
     {
         ClearVisuals();
+        pendingLocalApply = false;
         wearNTear = null;
         piece = null;
         zNetView = null;
@@ -267,6 +278,107 @@ internal sealed class UnderSuperWaxProtection : MonoBehaviour
 
         ZDO? zdo = zNetView.GetZDO();
         return zdo != null && zdo.GetBool(UnderSuperWaxPlugin.ZdoKey, false);
+    }
+
+    internal bool TryRequestWaxApply(Vector3 effectPosition)
+    {
+        if (zNetView == null || !zNetView.IsValid() || IsWaxed() || pendingLocalApply)
+        {
+            return false;
+        }
+
+        pendingLocalApply = true;
+        pendingEffectPosition = effectPosition;
+        zNetView.InvokeRPC(ZNetView.Everybody, UnderSuperWaxPlugin.RpcRequestApplyWax);
+        return true;
+    }
+
+    private void RPC_RequestApplyWax(long sender)
+    {
+        if (zNetView == null || !zNetView.IsValid() || !zNetView.IsOwner())
+        {
+            return;
+        }
+
+        string result = "failed";
+        if (wearNTear == null || !UnderSuperWaxRules.IsEligibleMaterial(wearNTear))
+        {
+            result = "invalid";
+        }
+        else if (IsWaxed())
+        {
+            result = "already";
+        }
+        else
+        {
+            SetWaxed(true);
+            result = "ok";
+        }
+
+        zNetView.InvokeRPC(sender, UnderSuperWaxPlugin.RpcWaxApplyResult, result);
+    }
+
+    private void RPC_WaxApplyResult(long sender, string result)
+    {
+        if (!pendingLocalApply)
+        {
+            return;
+        }
+
+        pendingLocalApply = false;
+        Player? localPlayer = Player.m_localPlayer;
+        if (localPlayer == null)
+        {
+            return;
+        }
+
+        if (result == "ok")
+        {
+            localPlayer.GetInventory().RemoveItem(UnderSuperWaxPlugin.ItemPrefabName, 1, -1, true);
+            TriggerLocalApplyFeedback(localPlayer, pendingEffectPosition);
+            localPlayer.Message((MessageHud.MessageType)2, "Piece waxed!", 0, null);
+            RefreshState();
+            return;
+        }
+
+        if (result == "already")
+        {
+            localPlayer.Message((MessageHud.MessageType)2, "Already waxed!", 0, null);
+            return;
+        }
+
+        if (result == "invalid")
+        {
+            localPlayer.Message((MessageHud.MessageType)2, "Can only wax wood pieces", 0, null);
+            return;
+        }
+
+        localPlayer.Message((MessageHud.MessageType)2, "Wax application failed", 0, null);
+    }
+
+    private static void TriggerLocalApplyFeedback(Player player, Vector3 effectPosition)
+    {
+        if (ZNetScene.instance != null)
+        {
+            GameObject? hitSparks = ZNetScene.instance.GetPrefab("vfx_HitSparks");
+            GameObject? buildWood = ZNetScene.instance.GetPrefab("sfx_build_hammer_wood");
+
+            if (hitSparks != null)
+            {
+                UnityEngine.Object.Instantiate(hitSparks, effectPosition, Quaternion.identity);
+            }
+
+            if (buildWood != null)
+            {
+                UnityEngine.Object.Instantiate(buildWood, effectPosition, Quaternion.identity);
+            }
+        }
+
+        GameObject? visual = player.GetVisual();
+        if (visual != null)
+        {
+            visual.SendMessageUpwards("SetTrigger", "attack", SendMessageOptions.DontRequireReceiver);
+        }
     }
 
     private void ApplyVisuals(bool waxed)
@@ -313,13 +425,21 @@ internal sealed class UnderSuperWaxProtection : MonoBehaviour
     }
 }
 
+internal static class UnderSuperWaxRules
+{
+    internal static bool IsEligibleMaterial(WearNTear wearNTear)
+    {
+        return wearNTear != null && ((int)wearNTear.m_materialType == 0 || (int)wearNTear.m_materialType == 3);
+    }
+}
+
 [HarmonyPatch(typeof(WearNTear), "Awake")]
 internal static class WearNTear_Awake_Patch
 {
     [HarmonyPostfix]
     private static void Postfix(WearNTear __instance)
     {
-        if (!IsEligible(__instance))
+        if (!UnderSuperWaxRules.IsEligibleMaterial(__instance))
         {
             return;
         }
@@ -331,11 +451,6 @@ internal static class WearNTear_Awake_Patch
         }
 
         protection.RefreshState();
-    }
-
-    private static bool IsEligible(WearNTear wearNTear)
-    {
-        return wearNTear != null && ((int)wearNTear.m_materialType == 0 || (int)wearNTear.m_materialType == 3);
     }
 }
 
@@ -433,7 +548,7 @@ internal static class Player_UpdatePlacement_Patch
             return false;
         }
 
-        if (!IsEligible(wearNTear))
+        if (!UnderSuperWaxRules.IsEligibleMaterial(wearNTear))
         {
             __instance.Message((MessageHud.MessageType)2, "Can only wax wood pieces", 0, null);
             return false;
@@ -451,50 +566,16 @@ internal static class Player_UpdatePlacement_Patch
             return false;
         }
 
-        zNetView.ClaimOwnership();
         UnderSuperWaxProtection protection = wearNTear.GetComponent<UnderSuperWaxProtection>();
         if (protection == null)
         {
             protection = wearNTear.gameObject.AddComponent<UnderSuperWaxProtection>();
         }
 
-        protection.SetWaxed(true);
-        __instance.GetInventory().RemoveItem(UnderSuperWaxPlugin.ItemPrefabName, 1, -1, true);
-        TriggerEffects(hit.point);
-
-        GameObject? visual = __instance.GetVisual();
-        if (visual != null)
+        if (!protection.TryRequestWaxApply(hit.point))
         {
-            visual.SendMessageUpwards("SetTrigger", "attack", SendMessageOptions.DontRequireReceiver);
+            __instance.Message((MessageHud.MessageType)2, "Wax application failed", 0, null);
         }
-
-        __instance.Message((MessageHud.MessageType)2, "Piece waxed!", 0, null);
         return false;
-    }
-
-    private static bool IsEligible(WearNTear wearNTear)
-    {
-        return (int)wearNTear.m_materialType == 0 || (int)wearNTear.m_materialType == 3;
-    }
-
-    private static void TriggerEffects(Vector3 position)
-    {
-        if (ZNetScene.instance == null)
-        {
-            return;
-        }
-
-        GameObject? hitSparks = ZNetScene.instance.GetPrefab("vfx_HitSparks");
-        GameObject? buildWood = ZNetScene.instance.GetPrefab("sfx_build_hammer_wood");
-
-        if (hitSparks != null)
-        {
-            UnityEngine.Object.Instantiate(hitSparks, position, Quaternion.identity);
-        }
-
-        if (buildWood != null)
-        {
-            UnityEngine.Object.Instantiate(buildWood, position, Quaternion.identity);
-        }
     }
 }

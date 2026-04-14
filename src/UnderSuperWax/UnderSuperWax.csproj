@@ -6,9 +6,9 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>UnderSuperWax</AssemblyName>
     <RootNamespace>UnderSuperWax</RootNamespace>
-    <Version>0.0.1-alpha</Version>
-    <FileVersion>0.0.1.0</FileVersion>
-    <AssemblyVersion>0.0.1.0</AssemblyVersion>
+    <Version>0.0.2-alpha</Version>
+    <FileVersion>0.0.2.0</FileVersion>
+    <AssemblyVersion>0.0.2.0</AssemblyVersion>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <Deterministic>true</Deterministic>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>

@@ -1,6 +1,6 @@
 # UnderSuperWax
 
-UnderSuperWax is a SuperWax fork focused on one thing: reliable permanent waterproofing for wood builds.
+UnderSuperWax is a SuperWax fork focused on one thing: reliable permanent waterproofing (not only rain) for wood builds with cool Wax look.
 
 Your waxed pieces are protected from:
 
@@ -39,7 +39,7 @@ Result:
 
 1. Requires BepInEx.
 2. Requires Jotunn.
-3. Applies only to eligible wooden `WearNTear` pieces.
+3. Applies only to eligible wooden WearNTear pieces.
 
 ## Credit
 

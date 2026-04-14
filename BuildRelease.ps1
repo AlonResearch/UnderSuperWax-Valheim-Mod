@@ -9,7 +9,7 @@ $projectPath = Join-Path $repoRoot 'src\UnderSuperWax\UnderSuperWax.csproj'
 $packageDir = Join-Path $repoRoot 'package'
 $releaseDir = Join-Path $repoRoot 'releases'
 $stagingDir = Join-Path $env:TEMP ('UnderSuperWax-' + [Guid]::NewGuid().ToString('N'))
-$version = '0.0.1-alpha'
+$version = '0.0.2-alpha'
 $valheimRoot = 'C:\Program Files (x86)\Steam\steamapps\common\Valheim'
 $jotunnRoot = Join-Path $env:APPDATA 'r2modmanPlus-local\Valheim\cache\ValheimModding-Jotunn\2.29.0\plugins'
 $zipName = "UnderSuperWax-$version.zip"
@@ -47,7 +47,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "Build failed."
 }
 
-$filesToCopy = @('manifest.json', 'README.md', 'description.md', 'icon.png')
+$filesToCopy = @('manifest.json', 'README.md', 'icon.png')
 foreach ($fileName in $filesToCopy) {
     Copy-Item (Join-Path $packageDir $fileName) $stagingDir -Force
 }
