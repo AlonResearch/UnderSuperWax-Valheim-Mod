@@ -2,16 +2,11 @@
 
 ## 0.0.2-alpha
 
-- Released the owner-authoritative RPC wax application flow under the alpha version line.
-- Kept hammer-based wax application, Beewax crafting, and waterproofing behavior intact.
-- Standardized the release packaging to use the Thunderstore README-only layout.
-
-## 0.0.2
-
 - Added owner-authoritative per-piece RPC wax application flow for improved multiplayer consistency.
 - Kept hammer-based wax apply gameplay unchanged while moving final state mutation to the authoritative owner.
 - Added result callback handling so Beewax is consumed only on successful authoritative application.
 - Added clearer failure feedback for rejected or failed wax apply attempts.
+- Standardized the release packaging to use the Thunderstore README-only layout.
 
 ## 0.0.1-alpha
 
