@@ -105,4 +105,6 @@ Reference resolution defaults:
 
 ## Credit
 
+Mod author: Aloncifer.
+
 Original mod and Beewax concept: SuperWax by JasterLee.

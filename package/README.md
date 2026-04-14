@@ -43,4 +43,6 @@ Result:
 
 ## Credit
 
+Mod author: Aloncifer.
+
 Original mod and concept: SuperWax by JasterLee.
