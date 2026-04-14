@@ -1,0 +1,500 @@
+using System;
+using System.IO;
+using System.Reflection;
+using BepInEx;
+using BepInEx.Configuration;
+using HarmonyLib;
+using Jotunn.Configs;
+using Jotunn.Entities;
+using Jotunn.Managers;
+using UnityEngine;
+
+namespace UnderSuperWax;
+
+[BepInPlugin(ModGuid, ModName, ModVersion)]
+[BepInDependency("com.jotunn.jotunn")]
+public sealed class UnderSuperWaxPlugin : BaseUnityPlugin
+{
+    public const string ModGuid = "com.alon.tuf.undersuperwax";
+    public const string ModName = "UnderSuperWax";
+    public const string ModVersion = "0.0.1-alpha";
+
+    internal const string ZdoKey = "UnderSuperWax_Waxed_Final_v1";
+    internal const string ItemPrefabName = "Beewax";
+    internal const string ToolPrefabName = "UnderSuperWaxTool";
+
+    internal static ConfigEntry<float> ShineGlossiness = null!;
+    internal static ConfigEntry<float> ShineMetallic = null!;
+
+    private readonly Harmony harmony = new(ModGuid);
+
+    private void Awake()
+    {
+        ShineGlossiness = Config.Bind("Visuals", "Glossiness", 0.4f, "Wax glossiness (dimmer for subtle shine)");
+        ShineMetallic = Config.Bind("Visuals", "Metallic", 0.08f, "Metallic reflection (dimmer for subtle shine)");
+
+        harmony.PatchAll(typeof(UnderSuperWaxPlugin).Assembly);
+        PrefabManager.OnPrefabsRegistered += AddCustomContent;
+    }
+
+    private void OnDestroy()
+    {
+        PrefabManager.OnPrefabsRegistered -= AddCustomContent;
+        harmony.UnpatchSelf();
+    }
+
+    private void AddCustomContent()
+    {
+        PrefabManager.OnPrefabsRegistered -= AddCustomContent;
+
+        try
+        {
+            AssetBundle? bundle = LoadAssetBundle("UnderSuperWax.Resources.beewax_bundle");
+            if (bundle == null)
+            {
+                Logger.LogError("[UnderSuperWax] Failed to load beewax bundle.");
+                return;
+            }
+
+            GameObject modelPrefab = bundle.LoadAsset<GameObject>("assets/beewax_model_v1.prefab");
+            if (modelPrefab == null)
+            {
+                Logger.LogError("[UnderSuperWax] Prefab 'assets/beewax_model_v1.prefab' not found.");
+                bundle.Unload(true);
+                return;
+            }
+
+            Sprite? icon = LoadEmbeddedSprite("UnderSuperWax.Resources.beewax_icon.png");
+
+            ItemConfig itemConfig = new()
+            {
+                Name = "Beewax",
+                Description = "Pure beeswax. Permanent waterproofing for wood and submerged structures.",
+                CraftingStation = "piece_workbench",
+                Amount = 2,
+                Icons = icon == null ? null : new[] { icon }
+            };
+            itemConfig.AddRequirement(new RequirementConfig("Honey", 2, 0, true));
+            itemConfig.AddRequirement(new RequirementConfig("Resin", 4, 0, true));
+
+            CustomItem item = new(ItemPrefabName, "Honey", itemConfig);
+            if (item.ItemDrop != null)
+            {
+                item.ItemDrop.m_itemData.m_shared.m_food = 10f;
+                item.ItemDrop.m_itemData.m_shared.m_foodStamina = 42f;
+
+                Transform? defaultModel = item.ItemDrop.transform.Find("model");
+                if (defaultModel != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(defaultModel.gameObject);
+                }
+
+                GameObject modelInstance = UnityEngine.Object.Instantiate(modelPrefab, item.ItemDrop.transform);
+                modelInstance.name = "model";
+                modelInstance.transform.localPosition = Vector3.zero;
+                modelInstance.transform.localRotation = Quaternion.identity;
+                modelInstance.transform.localScale = Vector3.one;
+
+                ApplyShine(modelInstance.GetComponentsInChildren<Renderer>(true));
+                ItemManager.Instance.AddItem(item);
+                Logger.LogInfo("[UnderSuperWax] Beewax registered successfully.");
+            }
+
+            PieceConfig pieceConfig = new()
+            {
+                Name = "Apply Under Super Wax",
+                PieceTable = "_HammerPieceTable",
+                Category = "Misc",
+                Icon = icon
+            };
+            pieceConfig.Requirements = new[]
+            {
+                new RequirementConfig(ItemPrefabName, 1, 0, true)
+            };
+
+            PieceManager.Instance.AddPiece(new CustomPiece(ToolPrefabName, "piece_repair", pieceConfig));
+            bundle.Unload(false);
+        }
+        catch (Exception exception)
+        {
+            Logger.LogError($"[UnderSuperWax] Error registering content: {exception.Message}\n{exception.StackTrace}");
+        }
+    }
+
+    private static void ApplyShine(Renderer[] renderers)
+    {
+        foreach (Renderer renderer in renderers)
+        {
+            Material[] materials = renderer.materials;
+            foreach (Material material in materials)
+            {
+                if (material.HasProperty("_Metallic"))
+                {
+                    material.SetFloat("_Metallic", ShineMetallic.Value);
+                }
+
+                if (material.HasProperty("_Glossiness"))
+                {
+                    material.SetFloat("_Glossiness", ShineGlossiness.Value);
+                }
+            }
+        }
+    }
+
+    private static AssetBundle? LoadAssetBundle(string resourceName)
+    {
+        using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
+        if (stream == null)
+        {
+            return null;
+        }
+
+        return AssetBundle.LoadFromStream(stream);
+    }
+
+    private static Sprite? LoadEmbeddedSprite(string resourceName)
+    {
+        using Stream? stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
+        if (stream == null)
+        {
+            return null;
+        }
+
+        byte[] buffer = new byte[stream.Length];
+        _ = stream.Read(buffer, 0, buffer.Length);
+
+        Texture2D texture = new(2, 2);
+        if (!ImageConversion.LoadImage(texture, buffer))
+        {
+            return null;
+        }
+
+        return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
+    }
+}
+
+internal sealed class UnderSuperWaxProtection : MonoBehaviour
+{
+    private static readonly int MetallicId = Shader.PropertyToID("_Metallic");
+    private static readonly int GlossinessId = Shader.PropertyToID("_Glossiness");
+
+    private WearNTear? wearNTear;
+    private Piece? piece;
+    private ZNetView? zNetView;
+    private Renderer[]? renderers;
+    private MaterialPropertyBlock? propertyBlock;
+
+    private void Awake()
+    {
+        wearNTear = GetComponent<WearNTear>();
+        piece = GetComponent<Piece>();
+        zNetView = GetComponent<ZNetView>();
+        renderers = GetComponentsInChildren<Renderer>(true);
+        propertyBlock = new MaterialPropertyBlock();
+    }
+
+    private void Start()
+    {
+        RefreshState();
+    }
+
+    private void OnDestroy()
+    {
+        Cleanup();
+    }
+
+    internal bool IsWaxed()
+    {
+        if (zNetView == null || !zNetView.IsValid())
+        {
+            return false;
+        }
+
+        ZDO? zdo = zNetView.GetZDO();
+        return zdo != null && zdo.GetBool(UnderSuperWaxPlugin.ZdoKey, false);
+    }
+
+    internal void SetWaxed(bool waxed)
+    {
+        if (zNetView == null || !zNetView.IsValid())
+        {
+            return;
+        }
+
+        ZDO? zdo = zNetView.GetZDO();
+        if (zdo == null)
+        {
+            return;
+        }
+
+        zdo.Set(UnderSuperWaxPlugin.ZdoKey, waxed);
+        RefreshState();
+    }
+
+    internal void RefreshState()
+    {
+        ApplyVisuals(IsWaxed());
+    }
+
+    internal void Cleanup()
+    {
+        ClearVisuals();
+        wearNTear = null;
+        piece = null;
+        zNetView = null;
+        renderers = null;
+        propertyBlock = null;
+    }
+
+    internal static bool IsWaxed(WearNTear? wearNTear)
+    {
+        if (wearNTear == null)
+        {
+            return false;
+        }
+
+        UnderSuperWaxProtection? protection = wearNTear.GetComponent<UnderSuperWaxProtection>();
+        if (protection != null)
+        {
+            return protection.IsWaxed();
+        }
+
+        ZNetView? zNetView = wearNTear.GetComponent<ZNetView>();
+        if (zNetView == null || !zNetView.IsValid())
+        {
+            return false;
+        }
+
+        ZDO? zdo = zNetView.GetZDO();
+        return zdo != null && zdo.GetBool(UnderSuperWaxPlugin.ZdoKey, false);
+    }
+
+    private void ApplyVisuals(bool waxed)
+    {
+        if (renderers == null || propertyBlock == null)
+        {
+            return;
+        }
+
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer == null)
+            {
+                continue;
+            }
+
+            if (!waxed)
+            {
+                renderer.SetPropertyBlock(null);
+                continue;
+            }
+
+            renderer.GetPropertyBlock(propertyBlock);
+            propertyBlock.SetFloat(MetallicId, UnderSuperWaxPlugin.ShineMetallic.Value);
+            propertyBlock.SetFloat(GlossinessId, UnderSuperWaxPlugin.ShineGlossiness.Value);
+            renderer.SetPropertyBlock(propertyBlock);
+        }
+    }
+
+    private void ClearVisuals()
+    {
+        if (renderers == null)
+        {
+            return;
+        }
+
+        foreach (Renderer renderer in renderers)
+        {
+            if (renderer != null)
+            {
+                renderer.SetPropertyBlock(null);
+            }
+        }
+    }
+}
+
+[HarmonyPatch(typeof(WearNTear), "Awake")]
+internal static class WearNTear_Awake_Patch
+{
+    [HarmonyPostfix]
+    private static void Postfix(WearNTear __instance)
+    {
+        if (!IsEligible(__instance))
+        {
+            return;
+        }
+
+        UnderSuperWaxProtection protection = __instance.GetComponent<UnderSuperWaxProtection>();
+        if (protection == null)
+        {
+            protection = __instance.gameObject.AddComponent<UnderSuperWaxProtection>();
+        }
+
+        protection.RefreshState();
+    }
+
+    private static bool IsEligible(WearNTear wearNTear)
+    {
+        return wearNTear != null && ((int)wearNTear.m_materialType == 0 || (int)wearNTear.m_materialType == 3);
+    }
+}
+
+[HarmonyPatch(typeof(WearNTear), "IsWet")]
+internal static class WearNTear_IsWet_Patch
+{
+    [HarmonyPostfix]
+    private static void Postfix(WearNTear __instance, ref bool __result)
+    {
+        if (UnderSuperWaxProtection.IsWaxed(__instance))
+        {
+            __result = false;
+        }
+    }
+}
+
+[HarmonyPatch(typeof(WearNTear), "IsUnderWater")]
+internal static class WearNTear_IsUnderWater_Patch
+{
+    [HarmonyPostfix]
+    private static void Postfix(WearNTear __instance, ref bool __result)
+    {
+        if (UnderSuperWaxProtection.IsWaxed(__instance))
+        {
+            __result = false;
+        }
+    }
+}
+
+[HarmonyPatch(typeof(WearNTear), "HaveRoof")]
+internal static class WearNTear_HaveRoof_Patch
+{
+    [HarmonyPostfix]
+    private static void Postfix(WearNTear __instance, ref bool __result)
+    {
+        if (UnderSuperWaxProtection.IsWaxed(__instance))
+        {
+            __result = true;
+        }
+    }
+}
+
+[HarmonyPatch(typeof(WearNTear), "OnDestroy")]
+internal static class WearNTear_OnDestroy_Patch
+{
+    [HarmonyPostfix]
+    private static void Postfix(WearNTear __instance)
+    {
+        UnderSuperWaxProtection? protection = __instance.GetComponent<UnderSuperWaxProtection>();
+        if (protection != null)
+        {
+            protection.Cleanup();
+        }
+    }
+}
+
+[HarmonyPatch(typeof(Player), "UpdatePlacement")]
+internal static class Player_UpdatePlacement_Patch
+{
+    [HarmonyPrefix]
+    private static bool Prefix(Player __instance)
+    {
+        if (__instance != Player.m_localPlayer)
+        {
+            return true;
+        }
+
+        Piece? selectedPiece = __instance.GetSelectedPiece();
+        if (selectedPiece == null || selectedPiece.gameObject.name != UnderSuperWaxPlugin.ToolPrefabName)
+        {
+            return true;
+        }
+
+        if (!UnityEngine.Input.GetMouseButtonDown(0) || InventoryGui.IsVisible())
+        {
+            return false;
+        }
+
+        if (GameCamera.instance == null)
+        {
+            return false;
+        }
+
+        RaycastHit hit = default;
+        if (!Physics.Raycast(GameCamera.instance.transform.position, GameCamera.instance.transform.forward, out hit, 15f, LayerMask.GetMask("piece")))
+        {
+            return false;
+        }
+
+        ZNetView? zNetView = hit.collider.GetComponentInParent<ZNetView>();
+        WearNTear? wearNTear = hit.collider.GetComponentInParent<WearNTear>();
+        if (zNetView == null || !zNetView.IsValid() || wearNTear == null)
+        {
+            __instance.Message((MessageHud.MessageType)2, "Can only wax wood pieces", 0, null);
+            return false;
+        }
+
+        if (!IsEligible(wearNTear))
+        {
+            __instance.Message((MessageHud.MessageType)2, "Can only wax wood pieces", 0, null);
+            return false;
+        }
+
+        if (UnderSuperWaxProtection.IsWaxed(wearNTear))
+        {
+            __instance.Message((MessageHud.MessageType)2, "Already waxed!", 0, null);
+            return false;
+        }
+
+        if (!__instance.GetInventory().HaveItem(UnderSuperWaxPlugin.ItemPrefabName, true))
+        {
+            __instance.Message((MessageHud.MessageType)2, "You need Beewax to apply!", 0, null);
+            return false;
+        }
+
+        zNetView.ClaimOwnership();
+        UnderSuperWaxProtection protection = wearNTear.GetComponent<UnderSuperWaxProtection>();
+        if (protection == null)
+        {
+            protection = wearNTear.gameObject.AddComponent<UnderSuperWaxProtection>();
+        }
+
+        protection.SetWaxed(true);
+        __instance.GetInventory().RemoveItem(UnderSuperWaxPlugin.ItemPrefabName, 1, -1, true);
+        TriggerEffects(hit.point);
+
+        GameObject? visual = __instance.GetVisual();
+        if (visual != null)
+        {
+            visual.SendMessageUpwards("SetTrigger", "attack", SendMessageOptions.DontRequireReceiver);
+        }
+
+        __instance.Message((MessageHud.MessageType)2, "Piece waxed!", 0, null);
+        return false;
+    }
+
+    private static bool IsEligible(WearNTear wearNTear)
+    {
+        return (int)wearNTear.m_materialType == 0 || (int)wearNTear.m_materialType == 3;
+    }
+
+    private static void TriggerEffects(Vector3 position)
+    {
+        if (ZNetScene.instance == null)
+        {
+            return;
+        }
+
+        GameObject? hitSparks = ZNetScene.instance.GetPrefab("vfx_HitSparks");
+        GameObject? buildWood = ZNetScene.instance.GetPrefab("sfx_build_hammer_wood");
+
+        if (hitSparks != null)
+        {
+            UnityEngine.Object.Instantiate(hitSparks, position, Quaternion.identity);
+        }
+
+        if (buildWood != null)
+        {
+            UnityEngine.Object.Instantiate(buildWood, position, Quaternion.identity);
+        }
+    }
+}

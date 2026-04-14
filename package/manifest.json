@@ -1,0 +1,10 @@
+{
+  "name": "UnderSuperWax",
+  "version_number": "0.0.1",
+  "website_url": "",
+  "description": "Alpha fork of SuperWax by JasterLee. Adds Beewax for permanent waterproofing against rain and submersion.",
+  "dependencies": [
+    "denikson-BepInExPack_Valheim-5.4.2202",
+    "ValheimModding-Jotunn-2.29.0"
+  ]
+}
