@@ -15,13 +15,15 @@ namespace UnderSuperWax;
 [BepInDependency("com.jotunn.jotunn")]
 public sealed class UnderSuperWaxPlugin : BaseUnityPlugin
 {
-    public const string ModGuid = "com.alon.tuf.undersuperwax";
+    public const string ModGuid = "com.aloncifer.undersuperwax";
     public const string ModName = "UnderSuperWax";
     public const string ModVersion = "0.0.2";
 
     internal const string ZdoKey = "UnderSuperWax_Waxed_Final_v1";
+    internal const string LegacyZdoKey = "Jasterlee_Waxed_Final_v4";
     internal const string ItemPrefabName = "Beewax";
     internal const string ToolPrefabName = "UnderSuperWaxTool";
+    internal const string LegacyToolPrefabName = "BeewaxTool";
     internal const string RpcRequestApplyWax = "USW_RPC_RequestApplyWax_v1";
     internal const string RpcWaxApplyResult = "USW_RPC_WaxApplyResult_v1";
 
@@ -104,7 +106,7 @@ public sealed class UnderSuperWaxPlugin : BaseUnityPlugin
 
             PieceConfig pieceConfig = new()
             {
-                Name = "Apply Under Super Wax",
+                Name = "Apply Super Wax",
                 PieceTable = "_HammerPieceTable",
                 Category = "Misc",
                 Icon = icon
@@ -221,7 +223,24 @@ internal sealed class UnderSuperWaxProtection : MonoBehaviour
         }
 
         ZDO? zdo = zNetView.GetZDO();
-        return zdo != null && zdo.GetBool(UnderSuperWaxPlugin.ZdoKey, false);
+        if (zdo == null)
+        {
+            return false;
+        }
+
+        if (zdo.GetBool(UnderSuperWaxPlugin.ZdoKey, false))
+        {
+            return true;
+        }
+
+        bool legacyWaxed = zdo.GetBool(UnderSuperWaxPlugin.LegacyZdoKey, false);
+        if (legacyWaxed)
+        {
+            TryMigrateLegacyWaxedState(zdo);
+            return true;
+        }
+
+        return false;
     }
 
     internal void SetWaxed(bool waxed)
@@ -277,7 +296,20 @@ internal sealed class UnderSuperWaxProtection : MonoBehaviour
         }
 
         ZDO? zdo = zNetView.GetZDO();
-        return zdo != null && zdo.GetBool(UnderSuperWaxPlugin.ZdoKey, false);
+        return zdo != null && (zdo.GetBool(UnderSuperWaxPlugin.ZdoKey, false) || zdo.GetBool(UnderSuperWaxPlugin.LegacyZdoKey, false));
+    }
+
+    private void TryMigrateLegacyWaxedState(ZDO zdo)
+    {
+        if (zNetView == null || !zNetView.IsOwner())
+        {
+            return;
+        }
+
+        if (!zdo.GetBool(UnderSuperWaxPlugin.ZdoKey, false))
+        {
+            zdo.Set(UnderSuperWaxPlugin.ZdoKey, true);
+        }
     }
 
     internal bool TryRequestWaxApply(Vector3 effectPosition)
@@ -519,14 +551,22 @@ internal static class Player_UpdatePlacement_Patch
         }
 
         Piece? selectedPiece = __instance.GetSelectedPiece();
-        if (selectedPiece == null || selectedPiece.gameObject.name != UnderSuperWaxPlugin.ToolPrefabName)
+        if (selectedPiece == null)
         {
             return true;
         }
 
-        if (!UnityEngine.Input.GetMouseButtonDown(0) || InventoryGui.IsVisible())
+        string selectedName = selectedPiece.gameObject.name;
+        if (selectedName != UnderSuperWaxPlugin.ToolPrefabName && selectedName != UnderSuperWaxPlugin.LegacyToolPrefabName)
         {
-            return false;
+            return true;
+        }
+
+        // Only intercept the exact left-click wax apply action.
+        // Let vanilla placement input (including mouse2 cancel/back) run otherwise.
+        if (InventoryGui.IsVisible() || !UnityEngine.Input.GetMouseButtonDown(0))
+        {
+            return true;
         }
 
         if (GameCamera.instance == null)
