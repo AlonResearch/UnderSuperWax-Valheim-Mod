@@ -88,7 +88,7 @@ UnderSuperWax/          # Repository root
 1. Build and package command:
 `./BuildRelease.ps1`
 2. Output zip:
-`releases/UnderSuperWax-0.0.2-alpha.zip`
+`releases/UnderSuperWax-0.0.2.zip`
 3. Zip layout:
 `manifest.json`, `README.md`, `icon.png`, `plugins/UnderSuperWax.dll`
 

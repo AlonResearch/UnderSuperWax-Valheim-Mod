@@ -17,7 +17,7 @@ public sealed class UnderSuperWaxPlugin : BaseUnityPlugin
 {
     public const string ModGuid = "com.alon.tuf.undersuperwax";
     public const string ModName = "UnderSuperWax";
-    public const string ModVersion = "0.0.2-alpha";
+    public const string ModVersion = "0.0.2";
 
     internal const string ZdoKey = "UnderSuperWax_Waxed_Final_v1";
     internal const string ItemPrefabName = "Beewax";

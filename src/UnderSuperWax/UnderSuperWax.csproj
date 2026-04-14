@@ -6,7 +6,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <AssemblyName>UnderSuperWax</AssemblyName>
     <RootNamespace>UnderSuperWax</RootNamespace>
-    <Version>0.0.2-alpha</Version>
+    <Version>0.0.2</Version>
     <FileVersion>0.0.2.0</FileVersion>
     <AssemblyVersion>0.0.2.0</AssemblyVersion>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
